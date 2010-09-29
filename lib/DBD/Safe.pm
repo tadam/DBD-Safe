@@ -5,7 +5,7 @@ use warnings;
 
 =head1 NAME
 
-DBD::Safe - asdf
+DBD::Safe - keep safe connection to DB
 
 =head1 SYNOPSIS
 
@@ -15,7 +15,7 @@ DBD::Safe - asdf
 
 use base qw(DBD::File);
 
-use vars qw($err $errstr $sqlstate $drh $VERSION);
+use vars qw($err $errstr $sqlstate $drh);
 
 sub DESTROY {
     shift->STORE(Active => 0);
@@ -54,9 +54,6 @@ package DBD::Safe::dr;
 use strict;
 use warnings;
 
-use Yandex::Logger;
-use Yandex::DB ();
-
 $DBD::Safe::dr::imp_data_size = 0;
 use DBD::File;
 use DBI qw();
@@ -65,9 +62,7 @@ use base qw(DBD::File::dr);
 sub connect {
     my($drh, $dbname, $user, $auth, $attr) = @_;
     my $connect_func;
-    if ($dbname) {
-        $connect_func = sub { Yandex::DB::connectdb($dbname, $attr) };
-    } elsif ($attr->{connect_func}) {
+    if ($attr->{connect_func}) {
         $connect_func = $attr->{connect_func};
     } elsif ($attr->{dbi_connect_args}) {
         $connect_func = sub { DBI->connect(@{$attr->{dbi_connect_args}}) };
@@ -110,8 +105,6 @@ use strict;
 use warnings;
 
 $DBD::Safe::db::imp_data_size = 0;
-
-use Yandex::Logger;
 
 use vars qw($AUTOLOAD);
 
@@ -267,9 +260,8 @@ sub real_connect {
     };
     if ($@) {
         $state->{last_error} = $@;
-        WARN "Failed to connect to [$dbname]";
+        warn "Failed to connect to [$dbname]";
     } else {
-        DEBUG "Connected to [$dbname]";
         $dbh->STORE('x_safe_last_connected', time());
     }
     $state->{pid} = $$;
