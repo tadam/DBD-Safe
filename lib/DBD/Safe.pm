@@ -39,7 +39,7 @@ sub driver {
 
     my $self = $class->SUPER::driver({
         Name        => 'Safe',
-        Version     => $VERSION,
+        Version     => $DBD::Safe::VERSION,
         Err         => \$DBD::Safe::err,
         Errstr      => \$DBD::Safe::errstr,
         State       => \$DBD::Safe::sqlstate,
