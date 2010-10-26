@@ -1,4 +1,0 @@
-DBD::Safe allows to create safe connections to databases and automatically reconnects if it is needed.
-It works as DBI driver, so you need to change only DBI->connect() options, after this you use usual DBI interface,no additional module specific interface needed.
-
-See perldoc DBD::Safe for more information.
