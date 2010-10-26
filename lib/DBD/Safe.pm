@@ -3,13 +3,98 @@ package DBD::Safe;
 use strict;
 use warnings;
 
-=head1 NAME
-
-DBD::Safe - keep safe connection to DB
+#ABSTRACT: keep safe connection to DB
 
 =head1 SYNOPSIS
 
+  use DBI;
+  my $dbh = DBI->connect(
+      'DBI:Safe:', undef, undef,
+      { dbi_connect_args => [$dsn, $user, $password, $args] }
+  );
+
 =head1 DESCRIPTION
+
+DBD::Safe is an abstract DBI driver that helps you to keep safe connection to
+your database. Its purpose is reconnection to database when connection was corrupted.
+DBD::Safe makes reconnection in the following cases:
+  - connection was dropped (usually occurs in long-running processes)
+  - process was forked or threaded
+DBD::Safe throws exception if reconnection needed during the transaction.
+
+=head1 WHY YET ANOTHER SOLUTION?
+
+CPAN contains modules with similar functionality. On the first place it is a
+L<DBIx::Connector>, also see L<DBIx::HA> and L<DBIx::DWIW>.
+But DBIx::Connector and DBIx::DWIW assumes own interface for interacting with
+database. If you are going to use DBIx::Connector you must explicitly call
+$conn->dbh to get a real dbh connection. And if you want to add some fault tolerance
+in a tons of existed code, you must refactor all this code where you use database
+connections.
+
+DBD::Safe have a transparent interface. You just need to replace C<connect()> options
+and after this you can use it as usual database handler.
+
+=head1 METHODS
+
+=over
+
+=item C<connect>
+
+For using DBD::Safe use DBI in a such manner:
+
+  my $dbh = DBI->connect('DBI:Safe:', undef, undef, $dbd_safe_args);
+
+All arguments for DBD::Safe passes in the C<$dbd_safe_args> hashref.
+This hashref can have following keys:
+
+=over
+
+=item I<dbi_connect_args>
+
+It is an arrayref with arguments for DBI->connect() which you passes when you
+use DBI without DBD::Safe. These arguments will be used for (re)connection to
+your database
+
+=item I<connect_func>
+
+Instead of passing C<dbi_connect_args> you can pass coderef that will be called
+during (re)connection. This coderef must return database handler. Using
+C<connect_func> you can switch to another replica in case of disconnection or
+implement another logic.
+
+You must pass any of C<dbi_connect_args> or C<connect_func>.
+
+=item I<reconnect_period>
+
+If you want automatically reconnect after some time you can use this key.
+Reconnect will occur after C<reconnect_period> seconds.
+
+=item I<dbname>
+
+Some short name for your database that will be used in the module's
+warnings/exceptions.
+
+=back
+
+=item C<x_safe_get_dbh>
+
+If you have DBI with version >= 1.54, then you can explicitly call
+
+  my $real_dbh = $safe_dbh->x_safe_get_dbh;
+
+This method will return real database handler that uses in the current time.
+
+If you have DBI with version < 1.54, you can call
+
+  my $real_dbh = $safe_dbh->func('x_safe_get_dbh');
+
+=back
+
+=head1 SEE ALSO
+
+L<http://github.com/tadam/DBD-Safe>,
+L<DBIx::Connector>, L<DBIx::HA>, L<DBIx::DWIW>.
 
 =cut
 
