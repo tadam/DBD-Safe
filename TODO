@@ -1,0 +1,6 @@
+tests
+PrintError/RaiseError
+AutoCommit on/off
+named transactions
+ping mode
+reconnect_period -- дурацкая отдельная опция, подумать о более общем подходе, какой-то дополнительный callback

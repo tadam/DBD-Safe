@@ -56,24 +56,28 @@ It is an arrayref with arguments for DBI->connect() which you passes when you
 use DBI without DBD::Safe. These arguments will be used for (re)connection to
 your database
 
-=item I<connect_func>
+=item I<connect_cb>
 
 Instead of passing C<dbi_connect_args> you can pass coderef that will be called
 during (re)connection. This coderef must return database handler. Using
-C<connect_func> you can switch to another replica in case of disconnection or
+C<connect_cb> you can switch to another replica in case of disconnection or
 implement another logic.
 
-You must pass any of C<dbi_connect_args> or C<connect_func>.
+You must pass any of C<dbi_connect_args> or C<connect_cb>.
+
+=item I<retry_cb>
+
+This callback uses every time when DBD::Safe decides that reconnection needed.
+By default DBD::Safe make only one trie to reconnect and dies if it was
+unsuccessful. You can override this using C<retry_cb>.
+This callback takes one argument - number of reconnection trie and returns
+true or false (to make another reconnection attempt or not). You can place
+some C<sleep()> in this callback depending on number of trie.
 
 =item I<reconnect_period>
 
 If you want automatically reconnect after some time you can use this key.
 Reconnect will occur after C<reconnect_period> seconds.
-
-=item I<dbname>
-
-Some short name for your database that will be used in the module's
-warnings/exceptions.
 
 =back
 
@@ -146,42 +150,44 @@ use base qw(DBD::File::dr);
 
 sub connect {
     my($drh, $dbname, $user, $auth, $attr) = @_;
-    my $connect_func;
-    if ($attr->{connect_func}) {
-        $connect_func = $attr->{connect_func};
+    my $connect_cb;
+    if ($attr->{connect_cb}) {
+        $connect_cb = $attr->{connect_cb};
     } elsif ($attr->{dbi_connect_args}) {
-        $connect_func = sub { DBI->connect(@{$attr->{dbi_connect_args}}) };
+        $connect_cb = sub { DBI->connect(@{$attr->{dbi_connect_args}}) };
     } else {
         die "No connect way defined\n";
     }
 
-    my $reconnect_period;
-    if ($attr && ref($attr) eq 'HASH') {
-        $reconnect_period = $attr->{reconnect_period};
-        if (!$dbname) {
-            $dbname = $attr->{dbname} || '';
+    my $retry_cb = sub {
+        my $trie = shift;
+        if ($trie == 1) {
+            return 1;
+        } else {
+            return 0;
         }
-    }
+    };
+    $retry_cb = $attr->{retry_cb} if ($attr->{retry_cb});
+
+
+    my $reconnect_period = $attr->{reconnect_period};
 
     my $dbh = DBI::_new_dbh(
       $drh => {
-               Name         => $dbname,
+               Name         => 'safedb',
                USER         => $user,
                CURRENT_USER => $user,
               },
     );
     $dbh->STORE(Active => 1);
 
-    $dbh->STORE('x_safe_connect_func'     => $connect_func);
+    $dbh->STORE('x_safe_connect_cb'       => $connect_cb);
     $dbh->STORE('x_safe_state'            => {});
     $dbh->STORE('x_safe_reconnect_period' => $reconnect_period);
-    $dbh->STORE('x_safe_dbname'           => $dbname);
+    $dbh->STORE('x_safe_retry_cb'         => $retry_cb);
 
     return $dbh;
 }
-
-sub data_sources { my @sources = (); return @sources; }
-
 
 #######################################################################
 package DBD::Safe::db;
@@ -197,19 +203,33 @@ sub prepare;
 
 sub begin_work {
     my $dbh = shift;
-    $dbh->STORE('x_safe_in_transaction', 1);
+    my $in_transaction = $dbh->FETCH('x_safe_in_transaction');
+    $in_transaction++;
+    $dbh->STORE('x_safe_in_transaction', $in_transaction);
     return _proxy_method('begin_work', $dbh, @_);
 }
 
 sub commit {
     my $dbh = shift;
-    $dbh->STORE('x_safe_in_transaction', 0);
+    my $in_transaction = $dbh->FETCH('x_safe_in_transaction');
+    $in_transaction--;
+    if ($in_transaction < 0) {
+        warn "commit() without begin_work()\n";
+        $in_transaction = 0;
+    }
+    $dbh->STORE('x_safe_in_transaction', $in_transaction);
     return _proxy_method('commit', $dbh, @_);
 }
 
 sub rollback {
     my $dbh = shift;
-    $dbh->STORE('x_safe_in_transaction', 0);
+    my $in_transaction = $dbh->FETCH('x_safe_in_transaction');
+    $in_transaction--;
+    if ($in_transaction < 0) {
+        warn "rollback() without begin_work()\n";
+        $in_transaction = 0;
+    }
+    $dbh->STORE('x_safe_in_transaction', $in_transaction);
     return _proxy_method('rollback', $dbh, @_);
 }
 
@@ -285,7 +305,6 @@ sub stay_connected {
     my $in_transaction = $dbh->FETCH('x_safe_in_transaction');
     my $last_connected = $dbh->FETCH('x_safe_last_connected');
     my $reconnect_period = $dbh->FETCH('x_safe_reconnect_period');
-    my $dbname = $dbh->FETCH('x_safe_dbname');
 
     my $reconnect = 0;
     if ($state->{dbh}) {
@@ -311,7 +330,7 @@ sub stay_connected {
 
     if ($reconnect) {
         if ($in_transaction) {
-            die "Reconnect needed when db [$dbname] in transaction";
+            die "Reconnect needed when db in transaction";
         }
 
         $state->{dbh} = real_connect($dbh);
@@ -335,17 +354,16 @@ sub is_connected {
 sub real_connect {
     my $dbh = shift;
 
-    my $connect_func = $dbh->FETCH('x_safe_connect_func');
+    my $connect_cb = $dbh->FETCH('x_safe_connect_cb');
     my $state = $dbh->FETCH('x_safe_state');
-    my $dbname = $dbh->FETCH('x_safe_dbname');
 
     my $real_dbh;
     eval {
-        $real_dbh = $connect_func->();
+        $real_dbh = $connect_cb->();
     };
     if ($@) {
         $state->{last_error} = $@;
-        warn "Failed to connect to [$dbname]";
+        warn "Failed to connect\n";
     } else {
         $dbh->STORE('x_safe_last_connected', time());
     }
