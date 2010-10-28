@@ -156,7 +156,7 @@ sub connect {
     } elsif ($attr->{dbi_connect_args}) {
         $connect_cb = sub { DBI->connect(@{$attr->{dbi_connect_args}}) };
     } else {
-        die "No connect way defined\n";
+        return $drh->set_err($DBI::stderr, "No connect way defined");
     }
 
     my $retry_cb = sub {
@@ -214,8 +214,8 @@ sub commit {
     my $in_transaction = $dbh->FETCH('x_safe_in_transaction');
     $in_transaction--;
     if ($in_transaction < 0) {
-        warn "commit() without begin_work()\n";
         $in_transaction = 0;
+        return $dbh->set_err($DBI::stderr, "commit() without begin_work()");
     }
     $dbh->STORE('x_safe_in_transaction', $in_transaction);
     return _proxy_method('commit', $dbh, @_);
@@ -226,8 +226,8 @@ sub rollback {
     my $in_transaction = $dbh->FETCH('x_safe_in_transaction');
     $in_transaction--;
     if ($in_transaction < 0) {
-        warn "rollback() without begin_work()\n";
         $in_transaction = 0;
+        return $dbh->set_err("rollback() without begin_work()");
     }
     $dbh->STORE('x_safe_in_transaction', $in_transaction);
     return _proxy_method('rollback', $dbh, @_);
@@ -329,8 +329,8 @@ sub stay_connected {
     }
 
     if ($reconnect) {
-        if ($in_transaction) {
-            die "Reconnect needed when db in transaction\n";
+        if ($in_transaction || ($state->{dbh} && !$state->{dbh}->{AutoCommit})) {
+            return $dbh->set_err($DBI::stderr, "Reconnect needed when db in transaction");
         }
 
         my $trie = 0;
@@ -348,7 +348,10 @@ sub stay_connected {
                 }
             } else {
                 my $error = $state->{last_error} || '';
-                die "All tries to connect is ended, can't connect: [$error]\n";
+                return $dbh->set_err(
+                    $DBI::stderr,
+                    "All tries to connect is ended, can't connect: [$error]"
+                );
             }
         }
     }
@@ -376,7 +379,6 @@ sub real_connect {
     };
     if ($@) {
         $state->{last_error} = $@;
-        warn "Failed to connect\n";
     } else {
         $dbh->STORE('x_safe_last_connected', time());
     }
