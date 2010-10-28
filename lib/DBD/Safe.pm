@@ -330,14 +330,27 @@ sub stay_connected {
 
     if ($reconnect) {
         if ($in_transaction) {
-            die "Reconnect needed when db in transaction";
+            die "Reconnect needed when db in transaction\n";
         }
 
-        $state->{dbh} = real_connect($dbh);
-    }
-
-    unless ($state->{dbh}) {
-        die $state->{last_error};
+        my $trie = 0;
+        my $retry_cb = $dbh->FETCH('x_safe_retry_cb');
+        while (1) {
+            $trie++;
+            my $can_connect = $retry_cb->($trie);
+            if ($can_connect) {
+                my $dbh = eval { real_connect($dbh) };
+                if ($@) {
+                    next;
+                } else {
+                    $state->{dbh} = $dbh;
+                    last;
+                }
+            } else {
+                my $error = $state->{last_error} || '';
+                die "All tries to connect is ended, can't connect: [$error]\n";
+            }
+        }
     }
 
     return $state->{dbh};
