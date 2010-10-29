@@ -156,7 +156,8 @@ sub connect {
     } elsif ($attr->{dbi_connect_args}) {
         $connect_cb = sub { DBI->connect(@{$attr->{dbi_connect_args}}) };
     } else {
-        return $drh->set_err($DBI::stderr, "No connect way defined");
+        die "No connect way defined\n";
+        #return $drh->set_err($DBI::stderr, "No connect way defined");
     }
 
     my $retry_cb = sub {
@@ -215,7 +216,8 @@ sub commit {
     $in_transaction--;
     if ($in_transaction < 0) {
         $in_transaction = 0;
-        return $dbh->set_err($DBI::stderr, "commit() without begin_work()");
+        warn "commit() without begin_work()\n";
+        #$dbh->set_err(0, "commit() without begin_work()");
     }
     $dbh->STORE('x_safe_in_transaction', $in_transaction);
     return _proxy_method('commit', $dbh, @_);
@@ -227,7 +229,8 @@ sub rollback {
     $in_transaction--;
     if ($in_transaction < 0) {
         $in_transaction = 0;
-        return $dbh->set_err("rollback() without begin_work()");
+        warn "rollback() withou begin_work()\n";
+        #$dbh->set_err(0, "rollback() without begin_work()");
     }
     $dbh->STORE('x_safe_in_transaction', $in_transaction);
     return _proxy_method('rollback', $dbh, @_);
@@ -330,7 +333,8 @@ sub stay_connected {
 
     if ($reconnect) {
         if ($in_transaction || ($state->{dbh} && !$state->{dbh}->{AutoCommit})) {
-            return $dbh->set_err($DBI::stderr, "Reconnect needed when db in transaction");
+            die "Reconnect needed when db in transaction\n";
+            #return $dbh->set_err($DBI::stderr, "Reconnect needed when db in transaction");
         }
 
         my $trie = 0;
@@ -340,7 +344,7 @@ sub stay_connected {
             my $can_connect = $retry_cb->($trie);
             if ($can_connect) {
                 my $dbh = eval { real_connect($dbh) };
-                if ($@) {
+                if (!$dbh) {
                     next;
                 } else {
                     $state->{dbh} = $dbh;
@@ -348,10 +352,12 @@ sub stay_connected {
                 }
             } else {
                 my $error = $state->{last_error} || '';
-                return $dbh->set_err(
-                    $DBI::stderr,
-                    "All tries to connect is ended, can't connect: [$error]"
-                );
+                chomp($error);
+                die "All tries to connect is ended, can't connect: [$error]\n";
+                #return $dbh->set_err(
+                #    $DBI::stderr,
+                #    "All tries to connect is ended, can't connect: [$error]"
+                #);
             }
         }
     }
