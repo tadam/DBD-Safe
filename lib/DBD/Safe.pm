@@ -201,6 +201,7 @@ $DBD::Safe::db::imp_data_size = 0;
 use vars qw($AUTOLOAD);
 
 sub prepare;
+sub column_info;
 
 sub begin_work {
     my $dbh = shift;
@@ -229,7 +230,7 @@ sub rollback {
     $in_transaction--;
     if ($in_transaction < 0) {
         $in_transaction = 0;
-        warn "rollback() withou begin_work()\n";
+        warn "rollback() without begin_work()\n";
         #$dbh->set_err(0, "rollback() without begin_work()");
     }
     $dbh->STORE('x_safe_in_transaction', $in_transaction);
@@ -277,12 +278,14 @@ sub STORE {
 
     if ($attr =~ /^(x_safe_|Active$)/) {
         $dbh->{$attr} = $val;
-    } else {
-        my $real_dbh = stay_connected($dbh);
-        $real_dbh->STORE($attr => $val);
+
+        # because of some old DBI bug
         if ($attr eq 'Active') {
             my $v = $real_dbh->FETCH($attr);
         }
+    } else {
+        my $real_dbh = stay_connected($dbh);
+        $real_dbh->STORE($attr => $val);
     }
 }
 
@@ -298,7 +301,8 @@ sub FETCH {
 }
 
 sub DESTROY {
-    shift->disconnect;
+    my $dbh = shift;
+    $dbh->disconnect;
 }
 
 sub stay_connected {
@@ -332,7 +336,7 @@ sub stay_connected {
     }
 
     if ($reconnect) {
-        if ($in_transaction || ($state->{dbh} && !$state->{dbh}->{AutoCommit})) {
+        if ($in_transaction) {# || ($state->{dbh} && !$state->{dbh}->{AutoCommit})) {
             die "Reconnect needed when db in transaction\n";
             #return $dbh->set_err($DBI::stderr, "Reconnect needed when db in transaction");
         }
