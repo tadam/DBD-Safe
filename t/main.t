@@ -5,6 +5,8 @@ package Test::DBD::Safe;
 use strict;
 use warnings;
 
+use lib qw(lib);
+
 use DBI;
 
 use Test::Class;
@@ -13,13 +15,27 @@ use Test::More;
 
 use base qw(Test::Class);
 
-sub connect : Test(2) {
+sub connect : Test(3) {
     use_ok('DBD::Safe');
     my $dbh = get_dbh();
     ok($dbh);
+    my $rdbh1 = $dbh->func('x_safe_get_dbh');
+    my $rdbh2 = $dbh->func('x_safe_get_dbh');
+    is("$rdbh2", "$rdbh1", "don't reconnect in good cases");
 }
 
-sub reconnect : Test(2) {
+sub reconnect_ping : Test(1) {
+    my $dbh = get_dbh();
+    my $rdbh1 = $dbh->func('x_safe_get_dbh');
+
+    no strict 'refs';
+    no warnings;
+    local *{'DBD::ExampleP::db::ping'} = sub { 0 };
+    my $rdbh2 = $dbh->func('x_safe_get_dbh');
+    isnt("$rdbh2", "$rdbh1", "reconnect if ping is negative");
+}
+
+sub reconnect_fork : Test(2) {
     my $dbh = get_dbh();
 
     my $parent_real_dbh = $dbh->func('x_safe_get_dbh');
@@ -42,6 +58,20 @@ sub reconnect : Test(2) {
 
     my $parent_real_dbh2 = $dbh->func('x_safe_get_dbh');
     is("$parent_real_dbh", "$parent_real_dbh2", "parent dbh not changed since fork()");
+}
+
+sub reconnect_threads : Test(1) {
+    no strict 'refs';
+    local $INC{'threads.pm'} = 1;
+    local *{'threads::tid'} = sub { 42 };
+
+    my $dbh = get_dbh();
+    my $real_dbh1 = $dbh->func('x_safe_get_dbh');
+    my $state = $dbh->FETCH('x_safe_state');
+    $state->{tid} = 43;
+
+    my $real_dbh2 = $dbh->func('x_safe_get_dbh');
+    isnt("$real_dbh2", "$real_dbh1", "reconnect if threads()");
 }
 
 sub get_dbh {

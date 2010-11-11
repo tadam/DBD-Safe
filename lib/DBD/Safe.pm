@@ -137,6 +137,10 @@ sub driver {
     return $self;
 }
 
+sub CLONE {
+    undef $drh;
+}
+
 #######################################################################
 package DBD::Safe::dr;
 
@@ -198,6 +202,13 @@ use warnings;
 
 $DBD::Safe::db::imp_data_size = 0;
 
+my $LOCAL_ATTRIBUTES = {
+    PrintError => 1,
+    RaiseError => 1,
+    Active => 1,
+    AutoCommit => 1,
+};
+
 use vars qw($AUTOLOAD);
 
 sub prepare;
@@ -208,6 +219,7 @@ sub begin_work {
     my $in_transaction = $dbh->FETCH('x_safe_in_transaction');
     $in_transaction++;
     $dbh->STORE('x_safe_in_transaction', $in_transaction);
+    $dbh->STORE('AutoCommit', 0);
     return _proxy_method('begin_work', $dbh, @_);
 }
 
@@ -273,16 +285,29 @@ sub disconnect {
     1;
 }
 
+sub _attr_is_local {
+    my $attr = shift;
+    return 0 unless defined($attr);
+    return 1 if ($attr =~ /^(x_safe_|private_)/);
+    return 1 if ($LOCAL_ATTRIBUTES->{$attr});
+    return 0;
+}
+
 sub STORE {
     my ($dbh, $attr, $val) = @_;
 
-    if ($attr =~ /^(x_safe_|Active$)/) {
+    if (_attr_is_local($attr)) {
         $dbh->{$attr} = $val;
 
         # because of some old DBI bug
         if ($attr eq 'Active') {
-            my $v = $real_dbh->FETCH($attr);
+            my $v = $dbh->FETCH($attr);
         }
+
+#        if ($attr eq 'AutoCommit') {
+#            my $real_dbh = stay_connected($dbh);
+#            $real_dbh->STORE($attr => $val) if ($real_dbh);
+#        }
     } else {
         my $real_dbh = stay_connected($dbh);
         $real_dbh->STORE($attr => $val);
@@ -292,7 +317,7 @@ sub STORE {
 sub FETCH {
     my ($dbh, $attr) = @_;
 
-    if ($attr =~ /^(x_safe_|Active$)/) {
+    if (_attr_is_local($attr)) {
         return $dbh->{$attr};
     } else {
         my $real_dbh = stay_connected($dbh);
@@ -373,6 +398,9 @@ sub is_connected {
     my $dbh = shift;
 
     my $state = $dbh->FETCH('x_safe_state');
+
+    my $active = $state->{dbh}->{Active} || '';
+    my $ping = $state->{dbh}->ping || '';
 
     return $state->{dbh}->{Active} && $state->{dbh}->ping;
 }
