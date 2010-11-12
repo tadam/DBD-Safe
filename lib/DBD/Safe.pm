@@ -71,13 +71,14 @@ This callback uses every time when DBD::Safe decides that reconnection needed.
 By default DBD::Safe make only one trie to reconnect and dies if it was
 unsuccessful. You can override this using C<retry_cb>.
 This callback takes one argument - number of reconnection trie and returns
-true or false (to make another reconnection attempt or not). You can place
-some C<sleep()> in this callback depending on number of trie.
+true or false (to make another reconnection attempt or not).
+For example, you can place some C<sleep()> in this callback depending on number of trie.
 
-=item I<reconnect_period>
+=item I<reconnect_cb>
 
-If you want automatically reconnect after some time you can use this key.
-Reconnect will occur after C<reconnect_period> seconds.
+Callback that additionally checks needness of reconnection. Input argument is a $dbh
+handler, output - true or false.
+For example, you can use this callback to make reconnection every N seconds.
 
 =back
 
@@ -174,6 +175,9 @@ sub connect {
     };
     $retry_cb = $attr->{retry_cb} if ($attr->{retry_cb});
 
+    my $reconnect_cb = sub { 0 };
+    $reconnect_cb = $attr->{reconnect_cb} if ($attr->{reconnect_cb});
+
 
     my $reconnect_period = $attr->{reconnect_period};
 
@@ -188,8 +192,8 @@ sub connect {
 
     $dbh->STORE('x_safe_connect_cb'       => $connect_cb);
     $dbh->STORE('x_safe_state'            => {});
-    $dbh->STORE('x_safe_reconnect_period' => $reconnect_period);
     $dbh->STORE('x_safe_retry_cb'         => $retry_cb);
+    $dbh->STORE('x_safe_reconnect_cb'     => $reconnect_cb);
 
     return $dbh;
 }
@@ -335,19 +339,15 @@ sub stay_connected {
 
     my $state = $dbh->FETCH('x_safe_state');
     my $in_transaction = $dbh->FETCH('x_safe_in_transaction');
-    my $last_connected = $dbh->FETCH('x_safe_last_connected');
-    my $reconnect_period = $dbh->FETCH('x_safe_reconnect_period');
+    my $reconnect_cb = $dbh->FETCH('x_safe_reconnect_cb');
 
     my $reconnect = 0;
     if ($state->{dbh}) {
         if (
+            $reconnect_cb->($dbh) ||
             (defined($state->{tid}) && $state->{tid} != threads->tid) ||
             ($state->{pid} != $$) ||
-            (!is_connected($dbh)) ||
-            (
-             $reconnect_period && $last_connected &&
-             (time() - $last_connected > $reconnect_period)
-            )
+            (!is_connected($dbh))
            )
         {
             $reconnect = 1;
@@ -417,9 +417,8 @@ sub real_connect {
     };
     if ($@) {
         $state->{last_error} = $@;
-    } else {
-        $dbh->STORE('x_safe_last_connected', time());
     }
+
     $state->{pid} = $$;
     $state->{tid} = threads->tid if $INC{'threads.pm'};
 

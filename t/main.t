@@ -15,13 +15,31 @@ use Test::More;
 
 use base qw(Test::Class);
 
-sub connect : Test(3) {
+sub _connect : Test(3) {
     use_ok('DBD::Safe');
     my $dbh = get_dbh();
     ok($dbh);
     my $rdbh1 = $dbh->func('x_safe_get_dbh');
     my $rdbh2 = $dbh->func('x_safe_get_dbh');
     is("$rdbh2", "$rdbh1", "don't reconnect in good cases");
+}
+
+sub _x_safe_get_dbh : Test(4) {
+    my $dbh = get_dbh();
+    my $rdbh = $dbh->func('x_safe_get_dbh');
+
+    my $test = sub {
+        isnt("$rdbh", "$dbh", "dbh and real_dbh is different");
+        is($rdbh->{Driver}->{Name}, "ExampleP", "real_dbh is really real");
+    };
+    $test->();
+
+    if ($DBI::VERSION <= 1.53) {
+        return ("\$DBI::VERSION <= 1.53, don't test implicit call of x_safe_get_dbh");
+    }
+
+    $rdbh = $dbh->x_safe_get_dbh;
+    $test->();
 }
 
 sub reconnect_ping : Test(1) {
@@ -74,10 +92,45 @@ sub reconnect_threads : Test(1) {
     isnt("$real_dbh2", "$real_dbh1", "reconnect if threads()");
 }
 
+sub retry_cb : Test(1) {
+    my $cb = sub {
+        my $trie = shift;
+        return 0
+    };
+    dies_ok(sub { get_dbh({retry_cb => $cb}) }, "always negative retry_cb");
+}
+
+sub reconnect_cb : Test(2) {
+    my $last_connected;
+    my $cb = sub {
+        use Time::HiRes qw(time);
+        my $dbh = shift;
+        my $t = time();
+        if (!defined($last_connected) ||
+            ($t - $last_connected >= 1))
+        {
+            $last_connected = $t;
+            return 1;
+        } else {
+            return 0;
+        }
+    };
+    my $dbh = get_dbh({reconnect_cb => $cb});
+    my $rdbh1 = $dbh->func('x_safe_get_dbh');
+    my $rdbh2 = $dbh->func('x_safe_get_dbh');
+    sleep(1);
+    my $rdbh3 = $dbh->func('x_safe_get_dbh');
+
+    is("$rdbh2", "$rdbh1", "don't use reconnect_cb when it is not needed");
+    isnt("$rdbh3", "$rdbh2", "reconnected using reconnect_cb");
+}
+
 sub get_dbh {
+    my $attr = shift || {};
     my $dbh = DBI->connect('DBI:Safe:', undef, undef,
         {
-         dbi_connect_args => ['dbi:ExampleP:dummy', '', '']
+         dbi_connect_args => ['dbi:ExampleP:dummy', '', ''],
+         %{$attr},
         }
     );
     return $dbh;
@@ -87,7 +140,7 @@ sub get_dbh {
 # реконнект после:
 # - разрыва соединения
 # retry_cb
-# reconnect_period
+# reconnect_cb
 # PrintError/RaiseError/etc
 # x_safe_get_dbh
 
