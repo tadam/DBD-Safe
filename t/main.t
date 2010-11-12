@@ -137,12 +137,8 @@ sub get_dbh {
 }
 
 # валидация параметров
-# реконнект после:
-# - разрыва соединения
-# retry_cb
-# reconnect_cb
+# реконнект после разрыва соединения
 # PrintError/RaiseError/etc
-# x_safe_get_dbh
 
 Test::Class->runtests(
     __PACKAGE__->new
