@@ -125,11 +125,35 @@ sub reconnect_cb : Test(2) {
     isnt("$rdbh3", "$rdbh2", "reconnected using reconnect_cb");
 }
 
+sub transaction : Test(5) {
+    my $dbh = get_dbh();
+    ok($dbh->{AutoCommit}, 'AutoCommit is true');
+    eval {
+        $dbh->begin_work;
+        ok(!$dbh->{AutoCommit}, 'AutoCommit is false during transaction');
+        $dbh->{x_safe_state}->{dbh}->STORE('Active', 0);
+        $dbh->func('x_safe_get_dbh');
+    };
+    my $error = '';
+    my $rollback_error = '1';
+    if ($@) {
+        $error = $@;
+        eval { $dbh->rollback };
+        $rollback_error = $@;
+    }
+
+    like($error, qr/reconnect.*transaction/i, 'no reconnect during transaction');
+    like($rollback_error, qr/disconnect.*transaction/i, 'error during rollback also');
+    ok($dbh->{AutoCommit}, 'AutoCommit backed to true');
+    $dbh->{AutoCommit} = 1;
+}
+
 sub get_dbh {
     my $attr = shift || {};
     my $dbh = DBI->connect('DBI:Safe:', undef, undef,
         {
          dbi_connect_args => ['dbi:ExampleP:dummy', '', ''],
+         PrintError => 1, RaiseError => 1, AutoCommit => 1,
          %{$attr},
         }
     );

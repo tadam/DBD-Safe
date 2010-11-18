@@ -1,4 +1,7 @@
 Revision history for DBD-Safe
 
 {{$NEXT}}
+        Add retry_cb, reconnect_cb options. Some transaction support.
+
+0.01    Thu Sep 30, 2010
         First opensource release.

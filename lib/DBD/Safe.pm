@@ -151,12 +151,19 @@ use warnings;
 $DBD::Safe::dr::imp_data_size = 0;
 use DBD::File;
 use DBI qw();
+use Yandex::DB qw();
 use base qw(DBD::File::dr);
 
 sub connect {
     my($drh, $dbname, $user, $auth, $attr) = @_;
+
     my $connect_cb;
-    if ($attr->{connect_cb}) {
+    if ($dbname) {
+        $connect_cb = sub {
+            my ($dbh) = Yandex::DB::discover($dbname, {RootClass => 'DBI'});
+            return $dbh;
+        }
+    } elsif ($attr->{connect_cb}) {
         $connect_cb = $attr->{connect_cb};
     } elsif ($attr->{dbi_connect_args}) {
         $connect_cb = sub { DBI->connect(@{$attr->{dbi_connect_args}}) };
@@ -204,6 +211,8 @@ package DBD::Safe::db;
 use strict;
 use warnings;
 
+use Time::HiRes qw(time);
+
 $DBD::Safe::db::imp_data_size = 0;
 
 my $LOCAL_ATTRIBUTES = {
@@ -220,20 +229,28 @@ sub column_info;
 
 sub begin_work {
     my $dbh = shift;
+
+    $dbh->STORE('x_safe_previous_AutoCommit', $dbh->FETCH('AutoCommit'));
+    $dbh->STORE('AutoCommit', 0);
+
     my $in_transaction = $dbh->FETCH('x_safe_in_transaction');
     $in_transaction++;
     $dbh->STORE('x_safe_in_transaction', $in_transaction);
-    $dbh->STORE('AutoCommit', 0);
+    $dbh->STORE('x_safe_transaction_start', time());
+
     return _proxy_method('begin_work', $dbh, @_);
 }
 
 sub commit {
     my $dbh = shift;
+
+    $dbh->STORE('AutoCommit', $dbh->FETCH('x_safe_previous_AutoCommit'));
+
     my $in_transaction = $dbh->FETCH('x_safe_in_transaction');
     $in_transaction--;
     if ($in_transaction < 0) {
         $in_transaction = 0;
-        warn "commit() without begin_work()\n";
+        die "commit() without begin_work()\n";
         #$dbh->set_err(0, "commit() without begin_work()");
     }
     $dbh->STORE('x_safe_in_transaction', $in_transaction);
@@ -242,14 +259,25 @@ sub commit {
 
 sub rollback {
     my $dbh = shift;
+
+    $dbh->STORE('AutoCommit', $dbh->FETCH('x_safe_previous_AutoCommit'));
+
     my $in_transaction = $dbh->FETCH('x_safe_in_transaction');
     $in_transaction--;
     if ($in_transaction < 0) {
         $in_transaction = 0;
-        warn "rollback() without begin_work()\n";
+        die "rollback() without begin_work()\n";
         #$dbh->set_err(0, "rollback() without begin_work()");
     }
     $dbh->STORE('x_safe_in_transaction', $in_transaction);
+
+    my $tr_start = $dbh->FETCH('x_safe_transaction_start') || 0;
+    my $last_reconnect = $dbh->FETCH('x_safe_state')->{last_reconnect} || 0;
+    if ($last_reconnect > $tr_start) {
+        die "Disconnect occured during transaction, can't call rollback()\n";
+    }
+
+
     return _proxy_method('rollback', $dbh, @_);
 }
 
@@ -308,10 +336,11 @@ sub STORE {
             my $v = $dbh->FETCH($attr);
         }
 
-#        if ($attr eq 'AutoCommit') {
+        if ($attr eq 'AutoCommit') {
+            my $caller = caller(0);
 #            my $real_dbh = stay_connected($dbh);
 #            $real_dbh->STORE($attr => $val) if ($real_dbh);
-#        }
+        }
     } else {
         my $real_dbh = stay_connected($dbh);
         $real_dbh->STORE($attr => $val);
@@ -361,6 +390,7 @@ sub stay_connected {
     }
 
     if ($reconnect) {
+        $state->{last_reconnect} = time();
         if ($in_transaction) {# || ($state->{dbh} && !$state->{dbh}->{AutoCommit})) {
             die "Reconnect needed when db in transaction\n";
             #return $dbh->set_err($DBI::stderr, "Reconnect needed when db in transaction");
@@ -417,6 +447,8 @@ sub real_connect {
     };
     if ($@) {
         $state->{last_error} = $@;
+    } else {
+        $state->{last_connected} = time();
     }
 
     $state->{pid} = $$;
