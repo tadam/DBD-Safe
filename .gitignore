@@ -1,3 +1,5 @@
+.build
+DBD-Safe-*
 Build
 MANIFEST.SKIP.bak
 META.yml
