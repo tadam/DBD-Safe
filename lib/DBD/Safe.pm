@@ -18,8 +18,10 @@ use warnings;
 DBD::Safe is an abstract DBI driver that helps you to keep safe connection to
 your database. Its purpose is reconnection to database when connection was corrupted.
 DBD::Safe makes reconnection in the following cases:
+
   - connection was dropped (usually occurs in long-running processes)
   - process was forked or threaded
+
 DBD::Safe throws exception if reconnection needed during the transaction.
 
 =head1 WHY YET ANOTHER SOLUTION?
