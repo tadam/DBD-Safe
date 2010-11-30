@@ -15,6 +15,8 @@ use Test::More;
 
 use base qw(Test::Class);
 
+$DBD::Safe::VERSION = 0.02;
+
 sub _connect : Test(3) {
     use_ok('DBD::Safe');
     my $dbh = get_dbh();
@@ -125,27 +127,113 @@ sub reconnect_cb : Test(2) {
     isnt("$rdbh3", "$rdbh2", "reconnected using reconnect_cb");
 }
 
-sub transaction : Test(5) {
-    my $dbh = get_dbh();
-    ok($dbh->{AutoCommit}, 'AutoCommit is true');
-    eval {
-        $dbh->begin_work;
-        ok(!$dbh->{AutoCommit}, 'AutoCommit is false during transaction');
-        $dbh->{x_safe_state}->{dbh}->STORE('Active', 0);
-        $dbh->func('x_safe_get_dbh');
-    };
-    my $error = '';
-    my $rollback_error = '1';
-    if ($@) {
-        $error = $@;
-        eval { $dbh->rollback };
-        $rollback_error = $@;
+sub transaction_autocommit_on : Test(12) {
+    for my $method (qw/commit rollback/) {
+        my $dbh = get_dbh();
+        dies_ok { $dbh->$method } "$method doesn't work without begin_work";
     }
+    {
+        my $dbh = get_dbh();
+        ok($dbh->{AutoCommit}, 'AutoCommit is true');
+        eval { $dbh->begin_work };
+        ok(!$@, 'can start begin_work in normal situation');
+        ok(!$dbh->{AutoCommit}, 'AutoCommit is false during transaction');
+        eval { $dbh->commit };
+        ok(!$@, 'can commit in normal situation');
+        ok($dbh->{AutoCommit}, 'AutoCommit backed to true');
+    }
+    {
+        my $dbh = get_dbh();
+        eval {
+            $dbh->begin_work;
+            $dbh->rollback;
+        };
+        ok(!$@, 'can rollback in normal situation');
+    }
+    {
+        my $dbh = get_dbh();
+        eval {
+            $dbh->begin_work;
+            $dbh->{x_safe_state}->{dbh}->STORE('Active', 0);
+            $dbh->x_safe_get_dbh;
+        };
+        ok($@, "can't reconnect during transaction");
+    }
+    {
+        my $dbh = get_dbh();
+        eval {
+            $dbh->begin_work;
+            $dbh->{x_safe_state}->{dbh}->STORE('Active', 0);
+        };
+        ok(!$@, "it's all ok before commit");
+        eval { $dbh->commit };
+        ok($@, "but can't commit with broken connection");
+        eval { $dbh->rollback };
+        ok($@, "and can't rollback with broken connection");
+    }
+}
 
-    like($error, qr/reconnect.*transaction/i, 'no reconnect during transaction');
-    like($rollback_error, qr/disconnect.*transaction/i, 'error during rollback also');
-    ok($dbh->{AutoCommit}, 'AutoCommit backed to true');
-    $dbh->{AutoCommit} = 1;
+sub transaction_autocommit_off : Test(6) {
+    my $g = sub { get_dbh({AutoCommit => 0 }) };
+    {
+        my $dbh = $g->();
+        ok(!$dbh->{AutoCommit}, 'AutoCommit is false');
+    }
+    {
+        my $dbh = $g->();
+        dies_ok { $dbh->begin_work; } "begin_work doesn't works with AutoCommit=false";
+    }
+    {
+        my $dbh = $g->();
+        eval {
+            $dbh->func('x_safe_get_dbh');
+            $dbh->commit;
+        };
+        ok(!$@, 'no errors in good situation');
+    }
+    {
+        my $dbh = $g->();
+        eval {
+            $dbh->func('x_safe_get_dbh');
+            $dbh->rollback;
+        };
+
+        ok(!$@, 'can rollback in good situation');
+    }
+    {
+        my $dbh = $g->();
+        eval {
+            $dbh->{x_safe_state}->{dbh}->STORE('Active', 0);
+            $dbh->commit;
+        };
+        ok($@, "can't commit with broken connection");
+
+        eval {
+            $dbh->rollback;
+        };
+        ok($@, "can't rollback with broken connection");
+    }
+}
+
+sub raise_error : Test(2) {
+    return ("not implemented yet");
+    my $f = sub {
+        my $raise_error = shift;
+        my $dies = shift || 0;
+
+        my $dbh = get_dbh({RaiseError => $raise_error, AutoCommit => 0});
+        $dbh->func('x_safe_get_dbh');
+        break_dbh($dbh);
+        eval { $dbh->begin_work };
+        my $error = $@;
+        unless ($dies) {
+            $error = !$@;
+        }
+        ok($error, "RaiseError: $raise_error, dies: $dies");
+    };
+
+    $f->(1, 1);
+    $f->(0, 0);
 }
 
 sub get_dbh {
@@ -160,8 +248,12 @@ sub get_dbh {
     return $dbh;
 }
 
-# валидация параметров
-# реконнект после разрыва соединения
+sub break_dbh {
+    my $dbh = shift;
+    $dbh->{x_safe_state}->{dbh}->STORE('Active', 0);
+}
+
+# parameters validation
 # PrintError/RaiseError/etc
 
 Test::Class->runtests(
