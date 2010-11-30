@@ -299,7 +299,7 @@ sub _proxy_method {
     my ($method, $dbh, @args) = @_;
     my $state = $dbh->FETCH('x_safe_state');
     my $real_dbh = stay_connected($dbh);
-    my $res = eval { $real_dbh->$method(@args) };
+    return $real_dbh->$method(@args);
 }
 
 # TODO: take a more accurate logic from DBD::Proxy

@@ -1,6 +1,9 @@
 Revision history for DBD-Safe
 
 {{$NEXT}}
+        remove unneeded (now) eval
+
+0.03    2010-11-30
 	Improvements for the case when AutoCommit is off.
 
 0.02    2010-10-30
