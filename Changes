@@ -1,10 +1,8 @@
 Revision history for DBD-Safe
 
 {{$NEXT}}
-        add last_insert_id prototype
-
-0.04    2010-12-06
-        remove unneeded (now) eval
+        - remove unneeded (now) eval
+        - add last_insert_id prototype
 
 0.03    2010-11-30
 	Improvements for the case when AutoCommit is off.
