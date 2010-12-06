@@ -228,6 +228,7 @@ use vars qw($AUTOLOAD);
 
 sub prepare;
 sub column_info;
+sub last_insert_id;
 
 sub begin_work {
     my $dbh = shift;
@@ -309,7 +310,9 @@ sub AUTOLOAD {
     my $class = $1;
     my $type = $2;
 
-    my $s = sub { return _proxy_method($method, @_) };
+    my $s = sub {
+        return _proxy_method($method, @_)
+    };
 
     no strict 'refs';
     *{$AUTOLOAD} = $s;
@@ -458,9 +461,9 @@ sub real_connect {
     my $real_dbh;
     eval {
         $real_dbh = $connect_cb->();
-        for (keys %{$LOCAL_ATTRIBUTES}) {
-            $real_dbh->{$_} = $dbh->FETCH($_);
-        }
+#        for (keys %{$LOCAL_ATTRIBUTES}) {
+#            $real_dbh->{$_} = $dbh->FETCH($_);
+#        }
     };
     if ($@) {
         $state->{last_error} = $@;
