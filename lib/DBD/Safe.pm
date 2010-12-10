@@ -153,19 +153,13 @@ use warnings;
 $DBD::Safe::dr::imp_data_size = 0;
 use DBD::File;
 use DBI qw();
-use Yandex::DB qw();
 use base qw(DBD::File::dr);
 
 sub connect {
     my($drh, $dbname, $user, $auth, $attr) = @_;
 
     my $connect_cb;
-    if ($dbname) {
-        $connect_cb = sub {
-            my ($dbh) = Yandex::DB::discover($dbname, {RootClass => 'DBI'});
-            return $dbh;
-        }
-    } elsif ($attr->{connect_cb}) {
+    if ($attr->{connect_cb}) {
         $connect_cb = $attr->{connect_cb};
     } elsif ($attr->{dbi_connect_args}) {
         $connect_cb = sub { DBI->connect(@{$attr->{dbi_connect_args}}) };
