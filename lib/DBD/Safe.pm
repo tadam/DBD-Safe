@@ -443,7 +443,7 @@ sub is_connected {
     my $active = $state->{dbh}->{Active} || '';
     my $ping = $state->{dbh}->ping || '';
 
-    return $state->{dbh}->{Active} && $state->{dbh}->ping;
+    return $active && $ping;
 }
 
 sub real_connect {

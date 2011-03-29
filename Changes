@@ -1,6 +1,9 @@
 Revision history for DBD-Safe
 
 {{$NEXT}}
+        - is_connected() now pings database once, not twice
+
+0.04    2010-11-30
         - remove unneeded (now) eval
         - add last_insert_id prototype
 
