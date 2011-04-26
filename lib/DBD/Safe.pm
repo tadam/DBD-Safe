@@ -472,3 +472,9 @@ sub real_connect {
 }
 
 1;
+
+package DBD::Safe::st;
+
+$DBD::Safe::st::imp_data_size = 0;
+
+1;
