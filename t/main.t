@@ -155,7 +155,7 @@ sub transaction_autocommit_on : Test(12) {
         eval {
             $dbh->begin_work;
             $dbh->{x_safe_state}->{dbh}->STORE('Active', 0);
-            $dbh->x_safe_get_dbh;
+            $dbh->func('x_safe_get_dbh');
         };
         ok($@, "can't reconnect during transaction");
     }

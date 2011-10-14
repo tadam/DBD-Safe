@@ -244,7 +244,7 @@ sub _do_commit_or_rollback {
     my ($dbh, $f, @args) = @_;
 
     if ($dbh->FETCH('AutoCommit')) {
-        die "commit() without begin_work()\n";
+        die "$f() without begin_work()\n";
     }
 
     my $in_transaction = $dbh->FETCH('x_safe_in_transaction');
@@ -314,9 +314,17 @@ sub AUTOLOAD {
 }
 
 sub x_safe_get_dbh {
-    my $dbh = shift;
-    my $real_dbh = stay_connected($dbh);
-    return $real_dbh;
+    # $dont_check is a special flag for FETCH and STORE methods
+    my ($dbh, $dont_check) = @_;
+
+    # doesn't call here FETCH avoiding recursion
+    my $state = $dbh->{x_safe_state};
+    if (!$state || !$state->{dbh} || !$dont_check) {
+        stay_connected($dbh);
+        $state = $dbh->{x_safe_state};
+    }
+
+    return $state->{dbh};
 }
 
 sub disconnect {
@@ -352,7 +360,7 @@ sub STORE {
 #            $real_dbh->{$attr} => $val if ($real_dbh);
 #        }
     } else {
-        my $real_dbh = stay_connected($dbh);
+        my $real_dbh = x_safe_get_dbh($dbh, 'dont_check');
         $real_dbh->STORE($attr => $val);
     }
 }
@@ -363,7 +371,7 @@ sub FETCH {
     if (_attr_is_local($attr)) {
         return $dbh->{$attr};
     } else {
-        my $real_dbh = stay_connected($dbh);
+        my $real_dbh = x_safe_get_dbh($dbh, 'dont_check');
         return $real_dbh->FETCH($attr);
     }
 }
