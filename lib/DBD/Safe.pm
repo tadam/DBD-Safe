@@ -169,8 +169,8 @@ sub connect {
     }
 
     my $retry_cb = sub {
-        my $trie = shift;
-        if ($trie == 1) {
+        my $try = shift;
+        if ($try == 1) {
             return 1;
         } else {
             return 0;
@@ -414,11 +414,11 @@ sub stay_connected {
             #return $dbh->set_err($DBI::stderr, "Reconnect needed when db in transaction");
         }
 
-        my $trie = 0;
+        my $try = 0;
         my $retry_cb = $dbh->FETCH('x_safe_retry_cb');
         while (1) {
-            $trie++;
-            my $can_connect = $retry_cb->($trie);
+            $try++;
+            my $can_connect = $retry_cb->($try);
             if ($can_connect) {
                 my $dbh = eval { real_connect($dbh) };
                 if (!$dbh) {

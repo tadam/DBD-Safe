@@ -96,7 +96,7 @@ sub reconnect_threads : Test(1) {
 
 sub retry_cb : Test(1) {
     my $cb = sub {
-        my $trie = shift;
+        my $try = shift;
         return 0
     };
     dies_ok(sub { get_dbh({retry_cb => $cb}) }, "always negative retry_cb");
