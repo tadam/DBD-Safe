@@ -1,6 +1,7 @@
 Revision history for DBD-Safe
 
 {{$NEXT}}
+        - FETCH/STORE attributes doesn't call stay_connected()
         - is_connected() now pings database once, not twice
 
 0.04    2010-11-30
