@@ -98,6 +98,14 @@ If you have DBI with version < 1.54, you can call
 
 =back
 
+=head1 BUGS AND CAVEATS
+
+Connection is checked on each query. This can double your request execution time if all your requests are fast and network latency of your database is big enough.
+
+Statement objects are not safe. Once you've prepared the statement, it won't reconnect to the database transparently.
+
+There are no retries. If the request fails, it fails. This module just check that DB is alive *before* it tries to execute the statement. (Custom, per-query policies support is planned for the future releases).
+
 =head1 SEE ALSO
 
 L<http://github.com/tadam/DBD-Safe>,
