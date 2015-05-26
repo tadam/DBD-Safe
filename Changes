@@ -1,6 +1,8 @@
 Revision history for DBD-Safe
 
 {{$NEXT}}
+
+0.07    2015-05-26
         - Remove DBD::File::dr dependency. DBD::File dependency alone
           is enough. (Thanks to Brian Mowrey).
         - Proper links on github. (Thanks to Brian Mowrey).
