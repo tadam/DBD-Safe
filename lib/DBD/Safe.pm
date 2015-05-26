@@ -3,7 +3,7 @@ package DBD::Safe;
 use strict;
 use warnings;
 
-#ABSTRACT: keep safe connection to DB
+#ABSTRACT: keeps safe database connection
 
 =head1 SYNOPSIS
 
@@ -15,8 +15,8 @@ use warnings;
 
 =head1 DESCRIPTION
 
-DBD::Safe is an abstract DBI driver that helps you to keep a safe connection to
-your database. Its purpose is to reconnect to the database when connection becomes corrupted.
+DBD::Safe is an abstract DBI driver that helps you to keep a safe database connection.
+Its purpose is to reconnect to the database when connection becomes corrupted.
 DBD::Safe makes reconnection in the following cases:
 
   - connection was dropped (usually occurs in long-running processes)
@@ -28,14 +28,14 @@ DBD::Safe throws an exception if reconnection is needed during the transaction.
 
 CPAN contains modules with similar functionality. On the first place it is a
 L<DBIx::Connector>, also see L<DBIx::HA> and L<DBIx::DWIW>.
-But DBIx::Connector and DBIx::DWIW assume their own interface for interacting with
+But DBIx::Connector and DBIx::DWIW assume their own interface for interacting with a
 database. If you are going to use DBIx::Connector you must explicitly call
 C<< $conn->dbh >> to get a real dbh connection. And if you want to add some fault tolerance
-in a tons of existed code, you must refactor all this code where you use database
+in tons of existed code, you must refactor all this code where you use database
 connections.
 
 DBD::Safe has a transparent interface. You just need to replace C<connect()> options
-and after this you can use it as usual database handler.
+and after this you can use it as an usual database handler.
 
 =head1 METHODS
 
@@ -43,12 +43,12 @@ and after this you can use it as usual database handler.
 
 =item C<connect>
 
-For using DBD::Safe use DBI in a such manner:
+For using DBD::Safe use DBI in such manner:
 
   my $dbh = DBI->connect('DBI:Safe:', undef, undef, $dbd_safe_args);
 
 All arguments for DBD::Safe are passed in the C<$dbd_safe_args> hashref.
-This hashref can have following keys:
+This hashref can have the following keys:
 
 =over
 
@@ -65,15 +65,15 @@ during (re)connection. This coderef must return database handler. Using
 C<connect_cb> you can switch to another replica in case of disconnection or
 implement another logic.
 
-You must pass one of C<dbi_connect_args> or C<connect_cb>.
+You have to pass either C<dbi_connect_args> or C<connect_cb>.
 
 =item I<retry_cb>
 
-This callback is used every time when DBD::Safe decides that reconnection needed.
-By default DBD::Safe make only one try to reconnect and dies if it was
+This callback is used every time when DBD::Safe decides that reconnection is needed.
+By default DBD::Safe does only one attempt to reconnect and dies if it was
 unsuccessful. You can override this using C<retry_cb>.
 This callback takes one argument - number of reconnection trials - and returns
-true or false (to make another reconnection attempt or not).
+true or false. Return values indicates whether next reconnection attempt is needed or not.
 For example, you can place some C<sleep()> in this callback depending on number of trials.
 
 =item I<reconnect_cb>
@@ -90,7 +90,7 @@ If you have DBI with version >= 1.54, then you can explicitly call
 
   my $real_dbh = $safe_dbh->x_safe_get_dbh;
 
-This method will return real database handler that uses in the current time.
+This method will return real database handler that is using at the moment.
 
 If you have DBI with version < 1.54, you can call
 
@@ -100,11 +100,11 @@ If you have DBI with version < 1.54, you can call
 
 =head1 BUGS AND CAVEATS
 
-Connection is checked on each query. This can double your request execution time if all your requests are fast and network latency of your database is big enough.
+Connection is being checked on each query. This can double your request execution time if all your requests are fast and network latency to your database is big enough.
 
 Statement objects are not safe. Once you've prepared the statement, it won't reconnect to the database transparently.
 
-There are no retries. If the request fails, it fails. This module just check that DB is alive *before* it tries to execute the statement. (Custom, per-query policies support is planned for the future releases).
+There are no retries. If a request fails, it fails. This module just checks that DB is alive *before* it tries to execute the statement. (Custom, per-query policies support is planned for the future releases).
 
 =head1 SEE ALSO
 
