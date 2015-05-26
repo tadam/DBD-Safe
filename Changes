@@ -1,6 +1,9 @@
 Revision history for DBD-Safe
 
 {{$NEXT}}
+        - Remove DBD::File::dr dependency. DBD::File dependency alone
+          is enough. (Thanks to Brian Mowrey).
+        - Proper links on github. (Thanks to Brian Mowrey).
 
 0.06    2012-07-19
         - FETCH/STORE attributes doesn't call stay_connected()
